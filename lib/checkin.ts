@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { send, useApi } from "@/lib/api";
 import type { CheckIn, Semester } from "@/lib/types";
 
@@ -42,19 +40,4 @@ export function openWeeks(semester: Semester | undefined) {
 
 export function reasonLabel(semester: Semester | undefined, value: string | null) {
   return semester?.absenceReasons.find((reason) => reason.value === value)?.label ?? null;
-}
-
-export function useUnfiledWeeks(studentCount: number): number[] {
-  const { rows } = useMyCheckins();
-  const { semester } = useSemester();
-
-  return useMemo(() => {
-    if (!semester || studentCount === 0) return [];
-    const filed = new Map<number, number>();
-    for (const row of rows) filed.set(row.week, (filed.get(row.week) ?? 0) + 1);
-    return semester.weeks
-      .filter((entry) => entry.week <= semester.currentWeek)
-      .map((entry) => entry.week)
-      .filter((week) => (filed.get(week) ?? 0) < studentCount);
-  }, [rows, semester, studentCount]);
 }

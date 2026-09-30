@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { send, useApi } from "@/lib/api";
 import type { L } from "@/lib/i18n";
@@ -9,7 +9,7 @@ import type {
   HomeworkFile,
   LessonFlags,
   Pair,
-  Semester,
+  Schedule,
   Session,
 } from "@/lib/types";
 
@@ -45,7 +45,7 @@ export function useMyStudents(): string[] {
   return useMemo(() => (data?.pairs ?? []).map((pair) => pair.student), [data]);
 }
 
-type Lessons = { sessions: Session[]; flags: LessonFlags };
+type Lessons = { sessions: Session[]; flags: LessonFlags; schedules: Schedule[] };
 
 export function useMyLessons() {
   const { data, loading, refresh } = useApi<Lessons>("/api/sessions");
@@ -55,7 +55,14 @@ export function useMyLessons() {
     [data],
   );
 
-  return { lessons, flags: data?.flags ?? {}, loading, refresh };
+  return {
+    lessons,
+    flags: data?.flags ?? {},
+    schedules: data?.schedules ?? [],
+    loaded: data !== undefined,
+    loading,
+    refresh,
+  };
 }
 
 export function useHomework() {
@@ -105,19 +112,17 @@ export function useHomeworkCounts() {
 export function usePendingLessons(): Session[] {
   const { lessons, flags } = useMyLessons();
   const { counts } = useHomeworkCounts();
-  const { data: me } = useApi<{ semester: Semester }>("/api/me");
-  const currentWeek = me?.semester.currentWeek;
+  const [since] = useState(() => new Date(Date.now() - 14 * 86_400_000).toISOString());
 
   return useMemo(() => {
-    if (currentWeek === undefined) return [];
     return lessons.filter(
       (session) =>
         session.status === "completed" &&
-        session.week >= currentWeek - 1 &&
+        session.endUtc >= since &&
         !counts[session.id] &&
         !flags[session.id]?.noHomework,
     );
-  }, [lessons, counts, flags, currentWeek]);
+  }, [lessons, counts, flags, since]);
 }
 
 export type HomeworkDraft = {

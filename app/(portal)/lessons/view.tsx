@@ -22,6 +22,7 @@ import {
   StatusPill,
   statusTone,
 } from "@/components/portal/kit";
+import { SessionPill } from "@/components/portal/session";
 import { Button, Input, Reveal, Textarea, cn, useToast } from "@/components/ui";
 import {
   attachHomework,
@@ -32,21 +33,19 @@ import {
   useHomeworkCounts,
   useHomeworkFor,
   useMyLessons,
+  useMyStudents,
   usePendingLessons,
   type AttachedFile,
 } from "@/lib/homework";
+import { useNow } from "@/lib/client";
 import { useI18n } from "@/lib/i18n";
+import { plannedMinutes, sessionTitle } from "@/lib/sessions";
 import type { HomeworkFile, Session } from "@/lib/types";
 import { teacherNav } from "@/lib/nav";
 import { portal } from "@/lib/portal";
 import { formatDayInTz, formatInTz, zoneLabel } from "@/lib/time";
 
-const STATUS_LABEL: Record<Session["status"], string> = {
-  completed: "tutor.attendedlabel",
-  scheduled: "training.soon",
-  missed: "student.missedcount",
-  cancelled: "lesson.notheld",
-};
+import { ScheduleCard, SessionActions } from "./schedule";
 
 const FILE_ICON: Record<HomeworkFile["kind"], ComponentType<{ className?: string }>> = {
   pdf: FileText,
@@ -65,7 +64,13 @@ export function LessonsView() {
   const toast = useToast();
   const tz = portal.user.timezone;
 
-  const { lessons, flags, loading, refresh: refreshLessons } = useMyLessons();
+  const { lessons: all, flags, schedules, loading, refresh: refreshLessons } = useMyLessons();
+  const students = useMyStudents();
+  const now = useNow();
+  const lessons = useMemo(
+    () => all.filter((lesson) => Date.parse(lesson.startUtc) <= now + 28 * 86_400_000),
+    [all, now],
+  );
   const { counts, refresh: refreshHomework } = useHomeworkCounts();
   const pending = usePendingLessons();
 
@@ -76,7 +81,9 @@ export function LessonsView() {
 
   const [pickedId, setPickedId] = useState<string | null>(null);
   const fallback =
-    lessons.find((lesson) => lesson.status === "completed")?.id ?? lessons[0]?.id ?? "";
+    lessons.find((lesson) => Date.parse(lesson.startUtc) <= now)?.id ??
+    lessons[lessons.length - 1]?.id ??
+    "";
   const selectedId = pickedId ?? fallback;
   const setSelectedId = setPickedId;
   const selected = lessons.find((lesson) => lesson.id === selectedId) ?? lessons[0];
@@ -122,7 +129,7 @@ export function LessonsView() {
                 <div className="min-w-0">
                   <p className="text-[14px] font-extrabold text-fg">{t("hw.prompt")}</p>
                   <p className="mt-0.5 text-[12.5px] text-fg-muted">
-                    {nudge.studentName} · {tv(nudge.topic)} ·{" "}
+                    {nudge.studentName} · {sessionTitle(nudge, t, tv)} ·{" "}
                     {formatDayInTz(nudge.startUtc, tz, locale)}
                   </p>
                   <p className="mt-1 text-[12px] text-fg-subtle">{t("hw.promptdesc")}</p>
@@ -151,6 +158,8 @@ export function LessonsView() {
           </section>
         </Reveal>
       )}
+
+      <ScheduleCard students={students} schedules={schedules} onChanged={reload} />
 
       <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">
         <SectionCard
@@ -185,7 +194,7 @@ export function LessonsView() {
                         >
                           <span className="min-w-0">
                             <span className="block truncate text-[13px] font-extrabold text-fg">
-                              {tv(lesson.topic)}
+                              {sessionTitle(lesson, t, tv)}
                             </span>
                             <span className="block truncate text-[11.5px] text-fg-subtle">
                               {lesson.studentName} ·{" "}
@@ -201,9 +210,7 @@ export function LessonsView() {
                           ) : pendingIds.has(lesson.id) ? (
                             <StatusPill tone="warning">{t("hw.pending")}</StatusPill>
                           ) : (
-                            <StatusPill tone={statusTone(lesson.status)}>
-                              {t(STATUS_LABEL[lesson.status])}
-                            </StatusPill>
+                            <SessionPill session={lesson} now={now} />
                           )}
                         </button>
                       </li>
@@ -218,13 +225,9 @@ export function LessonsView() {
         {selected ? (
           <div className="flex flex-col gap-4">
             <SectionCard
-              title={tv(selected.topic)}
+              title={sessionTitle(selected, t, tv)}
               description={`${selected.studentName} · ${t("common.week")} ${selected.week}`}
-              action={
-                <StatusPill tone={statusTone(selected.status)}>
-                  {t(STATUS_LABEL[selected.status])}
-                </StatusPill>
-              }
+              action={<SessionPill session={selected} now={now} />}
               delay={80}
             >
               <dl className="grid gap-3 sm:grid-cols-2">
@@ -237,14 +240,17 @@ export function LessonsView() {
                   {
                     icon: Clock,
                     label: t("lesson.duration"),
-                    value: selected.minutes
-                      ? `${selected.minutes} ${t("lesson.min")}`
-                      : t("lesson.notheld"),
+                    value:
+                      selected.status === "cancelled" || selected.status === "missed"
+                        ? t("lesson.notheld")
+                        : `${selected.minutes ?? plannedMinutes(selected)} ${t("lesson.min")}`,
                   },
                   {
                     icon: GraduationCap,
                     label: t("lesson.unit"),
-                    value: `${selected.level} · ${t("training.unit")} ${selected.unitNo}`,
+                    value: selected.unitNo
+                      ? `${selected.level} · ${t("training.unit")} ${selected.unitNo}`
+                      : selected.level,
                   },
                   {
                     icon: User,
@@ -274,6 +280,8 @@ export function LessonsView() {
                   {selected.notes ? tv(selected.notes) : t("lesson.nonotes")}
                 </span>
               </p>
+
+              <SessionActions session={selected} now={now} onChanged={reload} />
             </SectionCard>
 
             <SectionCard

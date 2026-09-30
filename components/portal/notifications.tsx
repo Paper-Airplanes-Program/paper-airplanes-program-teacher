@@ -5,6 +5,7 @@ import {
   Bell,
   CalendarClock,
   ClipboardCheck,
+  Megaphone,
   Star,
   TriangleAlert,
   UserPlus,
@@ -22,6 +23,7 @@ const ICON: Record<NotificationKind, ComponentType<{ className?: string }>> = {
   lesson: CalendarClock,
   incident: TriangleAlert,
   person: UserPlus,
+  announcement: Megaphone,
 };
 
 export function NotificationBell() {
@@ -91,33 +93,50 @@ export function NotificationBell() {
               <ul className="nav-scroll max-h-96 overflow-y-auto">
                 {items.map((item) => {
                   const Icon = ICON[item.kind];
-                  return (
-                    <li key={item.id} className="border-b border-line last:border-b-0">
-                      <Link
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        className={cn(
-                          "flex gap-3 px-4 py-3 transition-colors hover:bg-tint",
-                          fresh.includes(item.id) && "bg-tint-2",
-                        )}
-                      >
-                        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-tint text-fg-muted">
-                          <Icon className="h-3.5 w-3.5" />
+                  const row = cn(
+                    "flex gap-3 px-4 py-3 transition-colors",
+                    fresh.includes(item.id) && "bg-tint-2",
+                  );
+                  const content = (
+                    <>
+                      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line bg-tint text-fg-muted">
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-bold text-fg">
+                          {item.title}
                         </span>
-                        <span className="min-w-0">
-                          <span className="block text-[13px] font-bold text-fg">
-                            {item.title}
-                          </span>
-                          <span className="block truncate text-[12px] text-fg-muted">
+                        {item.body && (
+                          <span
+                            className={cn(
+                              "block text-[12px] text-fg-muted",
+                              item.href ? "truncate" : "leading-relaxed whitespace-pre-line",
+                            )}
+                          >
                             {item.body}
                           </span>
-                          {item.whenUtc && (
-                            <span className="block text-[11px] text-fg-subtle">
-                              {relativeDays(item.whenUtc, locale)}
-                            </span>
-                          )}
-                        </span>
-                      </Link>
+                        )}
+                        {item.whenUtc && (
+                          <span className="block text-[11px] text-fg-subtle">
+                            {relativeDays(item.whenUtc, locale)}
+                          </span>
+                        )}
+                      </span>
+                    </>
+                  );
+                  return (
+                    <li key={item.id} className="border-b border-line last:border-b-0">
+                      {item.href ? (
+                        <Link
+                          href={item.href}
+                          onClick={() => setOpen(false)}
+                          className={cn(row, "hover:bg-tint")}
+                        >
+                          {content}
+                        </Link>
+                      ) : (
+                        <div className={row}>{content}</div>
+                      )}
                     </li>
                   );
                 })}

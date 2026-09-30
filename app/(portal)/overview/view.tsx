@@ -18,11 +18,14 @@ import {
   humanise,
   statusTone,
 } from "@/components/portal/kit";
+import { JoinButton, SessionPill } from "@/components/portal/session";
 import { Button } from "@/components/ui";
 import { useApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useNow } from "@/lib/client";
 import { useHomework, useMyLessons, usePendingLessons } from "@/lib/homework";
 import { useI18n } from "@/lib/i18n";
+import { sessionState, sessionTitle } from "@/lib/sessions";
 import type { Pair } from "@/lib/types";
 import { teacherNav } from "@/lib/nav";
 import { portal } from "@/lib/portal";
@@ -34,12 +37,17 @@ export function OverviewView() {
   const tz = portal.user.timezone;
 
   const { lessons } = useMyLessons();
+  const now = useNow();
   const { data: me } = useApi<{ pairs: Pair[] }>("/api/me");
   const { items: homework } = useHomework();
 
   const upcoming = lessons
-    .filter((s) => s.status === "scheduled")
-    .slice()
+    .filter(
+      (s) =>
+        s.status !== "cancelled" &&
+        Date.parse(s.endUtc) >= now &&
+        Date.parse(s.startUtc) <= now + 7 * 86_400_000,
+    )
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
   const pending = usePendingLessons();
   const myPairs = me?.pairs ?? [];
@@ -96,7 +104,7 @@ export function OverviewView() {
                     {session.studentName}
                   </p>
                   <p className="truncate text-[11.5px] text-fg-subtle">
-                    {tv(session.topic)} · {t("common.week")} {session.week} ·{" "}
+                    {sessionTitle(session, t, tv)} · {t("common.week")} {session.week} ·{" "}
                     {formatDayInTz(session.startUtc, tz, locale)}
                   </p>
                 </div>
@@ -116,12 +124,21 @@ export function OverviewView() {
                   {session.studentName}
                 </p>
                 <p className="truncate text-[11.5px] text-fg-subtle">
-                  {tv(session.topic)} · {formatDayInTz(session.startUtc, tz, locale)}{" "}
+                  {sessionTitle(session, t, tv)} ·{" "}
+                  {formatDayInTz(session.startUtc, tz, locale)}{" "}
                   {formatInTz(session.startUtc, tz, locale)}{" "}
                   {zoneLabel(session.startUtc, tz)}
                 </p>
               </div>
-              <StatusPill tone={statusTone(session.status)}>{session.status}</StatusPill>
+              {sessionState(session, now) === "open" ? (
+                <JoinButton
+                  session={session}
+                  href={session.joinUrl ? `/api/sessions/${session.id}/join` : null}
+                  now={now}
+                />
+              ) : (
+                <SessionPill session={session} now={now} />
+              )}
             </Row>
           ))}
         </ul>

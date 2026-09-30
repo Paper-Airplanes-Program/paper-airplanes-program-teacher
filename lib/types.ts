@@ -24,6 +24,26 @@ export type Session = {
   status: "scheduled" | "completed" | "cancelled" | "missed";
   joinUrl: string;
   studentName?: string;
+  tutorName?: string;
+  semester?: string;
+  scheduleId?: string;
+  makeup?: boolean;
+  joins?: SessionJoin[];
+};
+
+export type SessionJoin = { by: "student" | "tutor"; atUtc: string };
+
+export type Schedule = {
+  id: string;
+  semester: string;
+  studentName: string;
+  tutorName: string;
+  startDate: string;
+  time: string;
+  timezone: string;
+  minutes: number;
+  joinUrl: string;
+  updatedUtc: string;
 };
 
 export type HomeworkFile = {
@@ -56,6 +76,7 @@ export type Assignment = {
   seen: boolean;
   answer?: string | null;
   submittedUtc?: string | null;
+  gradedUtc?: string | null;
   rubric: Rubric[];
 };
 
@@ -64,13 +85,18 @@ export type LessonFlags = Record<string, LessonFlag>;
 
 export type CheckIn = {
   id: string;
+  semester: string;
   week: number;
+  by: "student" | "tutor";
   studentName: string;
   tutorName: string;
   held: boolean;
   minutes: number | null;
   reason: string | null;
   note: string | null;
+  submittedUtc?: string;
+  editedUtc?: string;
+  editedBy?: string;
 };
 
 export type AbsenceReason = {
@@ -79,11 +105,19 @@ export type AbsenceReason = {
   label: L;
 };
 
-export type Semester = {
+export type SemesterWeek = { week: number; start: string; end: string };
+
+export type StoredSemester = {
+  id: string;
   name: L;
-  currentWeek: number;
-  weeks: { week: number; start: string; end: string }[];
+  start: string;
+  end: string;
   absenceReasons: AbsenceReason[];
+};
+
+export type Semester = StoredSemester & {
+  currentWeek: number;
+  weeks: SemesterWeek[];
 };
 
 export type Pair = {
@@ -173,21 +207,6 @@ export type VocabWord = {
   lastReviewedAt: string | null;
 };
 
-export type Achievements = {
-  points: number;
-  rank: number;
-  totalLearners: number;
-  badges: { id: string; icon: string; title: L; desc: L; earned: boolean }[];
-  certificates: {
-    id: string;
-    level: string;
-    issuedUtc: string;
-    reference: string;
-    hours: number;
-  }[];
-  nextCertificate: { level: string; progress: number; requirement: L };
-};
-
 export type Resource = {
   id: string;
   title: L;
@@ -261,11 +280,16 @@ export type AnnouncementTemplate = { id: string; name: L; subject: L; body: L };
 export type AnnouncementSent = {
   id: string;
   subject: L;
+  body?: L;
   audience: string;
   sentUtc: string;
+  sentBy?: string;
+  recipientIds?: string[];
   recipients: number;
   openRate: number;
 };
+
+export type Announcement = { id: string; subject: L; body: L; sentUtc: string };
 
 export type Analytics = {
   attendanceTrend: { week: string; rate: number }[];

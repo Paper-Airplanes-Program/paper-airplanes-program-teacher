@@ -30,6 +30,10 @@ export async function PATCH(
             id: item.id,
             studentName: item.studentName,
             sessionId: item.sessionId,
+            gradedUtc:
+              patch.status === "graded" && item.status !== "graded"
+                ? new Date().toISOString()
+                : (item.gradedUtc ?? null),
           }
         : item,
     ),

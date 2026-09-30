@@ -1,6 +1,7 @@
 import { actor, unauthorized } from "@/lib/actor";
 import { ok, read } from "@/lib/db";
-import type { Pair, Semester } from "@/lib/types";
+import { withWeeks } from "@/lib/semester";
+import type { Pair, StoredSemester } from "@/lib/types";
 
 export async function GET() {
   const user = await actor();
@@ -8,7 +9,11 @@ export async function GET() {
 
   const [pairs, semester] = await Promise.all([
     read<Pair[]>("pairs"),
-    read<Semester>("semester"),
+    read<StoredSemester>("semester"),
   ]);
-  return ok({ user, pairs: pairs.filter((pair) => pair.tutor === user.name), semester });
+  return ok({
+    user,
+    pairs: pairs.filter((pair) => pair.tutor === user.name),
+    semester: withWeeks(semester),
+  });
 }

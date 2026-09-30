@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarCheck, Check } from "lucide-react";
+import { CalendarCheck, Check, Lock } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/portal/app-shell";
@@ -19,18 +19,24 @@ import {
   type CheckInDraft,
   useSemester,
 } from "@/lib/checkin";
-import { useMyStudents } from "@/lib/homework";
+import { useNow } from "@/lib/client";
+import { useMyLessons, useMyStudents } from "@/lib/homework";
 import { useI18n } from "@/lib/i18n";
+import { weekPlan } from "@/lib/sessions";
 import type { CheckIn, Semester } from "@/lib/types";
 import { teacherNav } from "@/lib/nav";
 import { portal } from "@/lib/portal";
-import { formatDate } from "@/lib/time";
+import { formatDate, formatDayInTz, formatInTz } from "@/lib/time";
+
+type Plan = ReturnType<typeof weekPlan>;
 
 export function AttendanceView() {
   const { t, tv, locale } = useI18n();
   const { semester } = useSemester();
   const { rows: filed, loading, submit } = useMyCheckins();
   const students = useMyStudents();
+  const { lessons, loaded } = useMyLessons();
+  const now = useNow();
 
   const [pickedWeek, setPickedWeek] = useState<number | null>(null);
   const [pickedStudent, setPickedStudent] = useState<string | null>(null);
@@ -38,6 +44,10 @@ export function AttendanceView() {
   const student = pickedStudent ?? students[0] ?? "";
 
   const row = filed.find((entry) => entry.week === week && entry.studentName === student);
+  const plan = weekPlan(
+    lessons.filter((lesson) => lesson.week === week && lesson.studentName === student),
+    now,
+  );
 
   return (
     <AppShell
@@ -58,67 +68,84 @@ export function AttendanceView() {
           )
         }
       >
-        <Select
-          label={t("checkin.week")}
-          value={String(week)}
-          onChange={(event) => setPickedWeek(Number(event.target.value))}
-          options={openWeeks(semester).map((entry) => ({
-            value: String(entry.week),
-            label: `${t("common.week")} ${entry.week} · ${formatDate(entry.start, locale)} – ${formatDate(entry.end, locale)}`,
-          }))}
-          wrapperClassName="sm:max-w-[26rem]"
-        />
-
-        <div className="mt-5 flex flex-col gap-1.5">
-          <span className="text-[13px] font-semibold text-fg">
-            {t("checkin.student")}
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {students.map((name) => {
-              const active = name === student;
-              const done = filed.some(
-                (entry) => entry.week === week && entry.studentName === name,
-              );
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setPickedStudent(name)}
-                  aria-pressed={active}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] font-bold transition-all duration-300",
-                    active
-                      ? "border-transparent bg-tint-2 text-fg ring-2 ring-dawn-400"
-                      : "border-line bg-tint text-fg-muted hover:border-line-strong",
-                  )}
-                >
-                  {name}
-                  {done ? (
-                    <Check className="h-3.5 w-3.5 text-accent-mint" />
-                  ) : (
-                    <span
-                      aria-hidden
-                      className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-dawn-500 to-dawn-400"
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[12px] text-fg-subtle">{t("checkin.perstudent")}</p>
-        </div>
-
-        {semester && student ? (
-          <StudentForm
-            key={`${week}-${student}`}
-            week={week}
-            student={student}
-            filed={row}
-            semester={semester}
-            onSubmit={submit}
+        {semester?.currentWeek === 0 ? (
+          <EmptyState
+            message={`${t("checkin.notstarted")} ${formatDate(semester.start, locale)}`}
           />
         ) : (
-          <Loading rows={2} />
+          <>
+            <Select
+              label={t("checkin.week")}
+              value={String(week)}
+              onChange={(event) => setPickedWeek(Number(event.target.value))}
+              options={openWeeks(semester).map((entry) => ({
+                value: String(entry.week),
+                label: `${t("common.week")} ${entry.week} · ${formatDate(entry.start, locale)} – ${formatDate(entry.end, locale)}`,
+              }))}
+              wrapperClassName="sm:max-w-[26rem]"
+            />
+
+            <div className="mt-5 flex flex-col gap-1.5">
+              <span className="text-[13px] font-semibold text-fg">
+                {t("checkin.student")}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {students.map((name) => {
+                  const active = name === student;
+                  const done = filed.some(
+                    (entry) => entry.week === week && entry.studentName === name,
+                  );
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setPickedStudent(name)}
+                      aria-pressed={active}
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[13px] font-bold transition-all duration-300",
+                        active
+                          ? "border-transparent bg-tint-2 text-fg ring-2 ring-dawn-400"
+                          : "border-line bg-tint text-fg-muted hover:border-line-strong",
+                      )}
+                    >
+                      {name}
+                      {done ? (
+                        <Check className="h-3.5 w-3.5 text-accent-mint" />
+                      ) : (
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-dawn-500 to-dawn-400"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[12px] text-fg-subtle">{t("checkin.perstudent")}</p>
+            </div>
+
+            {semester && student && loaded ? (
+              row ? (
+                <FiledReport row={row} semester={semester} />
+              ) : plan.opensAt ? (
+                <p className="mt-5 rounded-2xl border border-dashed border-line px-5 py-6 text-center text-[13px] leading-relaxed text-fg-subtle">
+                  {t("sched.formwaits")} {formatDayInTz(plan.opensAt, portal.user.timezone, locale)}{" "}
+                  · {formatInTz(plan.opensAt, portal.user.timezone, locale)}
+                </p>
+              ) : (
+                <StudentForm
+                  key={`${week}-${student}`}
+                  week={week}
+                  student={student}
+                  plan={plan}
+                  semester={semester}
+                  onSubmit={submit}
+                />
+              )
+            ) : (
+              <Loading rows={2} />
+            )}
+          </>
         )}
       </SectionCard>
 
@@ -159,50 +186,100 @@ export function AttendanceView() {
   );
 }
 
+function FiledReport({ row, semester }: { row: CheckIn; semester: Semester }) {
+  const { t, tv } = useI18n();
+  const reason = reasonLabel(semester, row.reason);
+
+  return (
+    <div className="mt-5 flex flex-col gap-3 border-t border-line pt-5">
+      <p className="text-[13.5px] font-extrabold text-fg">
+        {row.studentName} · {t("common.week")} {row.week}
+      </p>
+      <div className="row flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <p className="text-[13.5px] font-bold text-fg">
+            {row.held
+              ? `${row.minutes} ${t("lesson.min")}`
+              : reason
+                ? tv(reason)
+                : t("checkin.nosession")}
+          </p>
+          {row.note && (
+            <p className="mt-1 text-[12.5px] leading-relaxed whitespace-pre-line text-fg-muted">
+              {row.note}
+            </p>
+          )}
+        </div>
+        <StatusPill tone={row.held ? "success" : "danger"}>
+          {row.held ? t("checkin.held") : t("checkin.nosession")}
+        </StatusPill>
+      </div>
+      <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-fg-subtle">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        {t("checkin.locked")}
+      </p>
+    </div>
+  );
+}
+
 function StudentForm({
   week,
   student,
-  filed,
+  plan,
   semester,
   onSubmit,
 }: {
   week: number;
   student: string;
-  filed: CheckIn | undefined;
+  plan: Plan;
   semester: Semester;
   onSubmit: (drafts: CheckInDraft[]) => Promise<void>;
 }) {
   const { t, tv } = useI18n();
   const toast = useToast();
 
-  const [held, setHeld] = useState(filed ? filed.held : true);
-  const [minutes, setMinutes] = useState(String(filed?.minutes ?? 60));
-  const [reason, setReason] = useState(
-    filed?.reason ?? semester.absenceReasons[0].value,
-  );
-  const [note, setNote] = useState(filed?.note ?? "");
+  const planned = plan.scheduled > 0;
+  const [held, setHeld] = useState(planned ? plan.held : true);
+  const [minutes, setMinutes] = useState(String(planned && plan.held ? plan.minutes : 60));
+  const [reason, setReason] = useState(semester.absenceReasons[0].value);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
 
   return (
     <form
       className="mt-5 flex flex-col gap-5 border-t border-line pt-5"
       onSubmit={async (event) => {
         event.preventDefault();
-        await onSubmit([
-          {
-            week,
-            studentName: student,
-            held,
-            minutes: held ? Number(minutes) || 0 : null,
-            reason: held ? null : reason,
-            note: note.trim() || null,
-          },
-        ]);
-        toast.success(t("checkin.sent"));
+        setBusy(true);
+        try {
+          await onSubmit([
+            {
+              week,
+              studentName: student,
+              held,
+              minutes: held ? Number(minutes) : null,
+              reason: held ? null : reason,
+              note: note.trim() || null,
+            },
+          ]);
+          toast.success(t("checkin.sent"));
+        } catch (cause) {
+          const message = (cause as Error).message;
+          toast.info(message === "locked" ? t("checkin.locked") : message);
+        } finally {
+          setBusy(false);
+        }
       }}
     >
       <p className="text-[13.5px] font-extrabold text-fg">
         {student} · {t("common.week")} {week}
       </p>
+
+      {planned && (
+        <p className="rounded-2xl border border-line bg-tint px-4 py-3 text-[12.5px] leading-relaxed text-fg-muted">
+          {t("sched.prefilled")}
+        </p>
+      )}
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-[13px] font-semibold text-fg">
@@ -232,8 +309,9 @@ function StudentForm({
         <Input
           label={t("checkin.minutes")}
           type="number"
-          min={0}
+          min={1}
           max={300}
+          required
           dir="ltr"
           value={minutes}
           onChange={(event) => setMinutes(event.target.value)}
@@ -259,7 +337,7 @@ function StudentForm({
         onChange={(event) => setNote(event.target.value)}
       />
 
-      <Button type="submit" className="self-start">
+      <Button type="submit" className="self-start" disabled={busy}>
         <CalendarCheck className="h-4 w-4" />
         {t("checkin.send")}
       </Button>
